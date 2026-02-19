@@ -45,8 +45,7 @@ def create_app(searcher: Searcher, cache_size: int = DEFAULT_CACHE_SIZE) -> Flas
             requested_k = 10 if k is None else max(1, min(int(k), 100))
         except (TypeError, ValueError):
             requested_k = 10
-        pids, ranks, scores = searcher.search(query, k=100)
-        pids, ranks, scores = pids[:requested_k], ranks[:requested_k], scores[:requested_k]
+        pids, ranks, scores = searcher.search(query, k=requested_k)
 
         exp_scores = [math.exp(score) for score in scores]
         total = sum(exp_scores)

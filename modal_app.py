@@ -65,10 +65,12 @@ def populate_volume():
 @app.cls(
     memory=16384,
     cpu=4.0,
+    min_containers=1,
+    max_containers=5,
     scaledown_window=3600,
     startup_timeout=900,
 )
-@modal.concurrent(max_inputs=100)
+@modal.concurrent(max_inputs=6)
 class ColbertService:
     @modal.enter()
     def load(self):
