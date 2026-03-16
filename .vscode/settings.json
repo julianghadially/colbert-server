@@ -28,5 +28,9 @@
     "ruff.configuration": "pyproject.toml",
     "ruff.enable": true,
     "ruff.lineLength": 100,
-    "ruff.organizeImports": false
+    "ruff.organizeImports": false,
+    "cursorpyright.analysis.extraPaths": [
+        "colbert_server"
+    ],
+    "cursorpyright.analysis.typeCheckingMode": "standard"
 }

@@ -1,14 +1,14 @@
-"""Build a ColBERT index from a Phantom Wiki articles.json file.
+"""Build a ColBERT index from a Phantom Wiki dataset.
 
 Usage:
-    python scripts/build_index.py /path/to/articles.json /path/to/output_dir
+    # From a local articles.json file:
+    python scripts/build_index.py /path/to/articles.json database/phantom-wiki
 
-    uv run python scripts/build_index.py \
-    /Users/julianghadially/Documents/code/phantom-wiki/output/depth_10_size_1000000/articles.json \
-    database/phantom-wiki
+    # From a Hugging Face dataset:
+    python scripts/build_index.py --from-hf julianghadially/phantom-wiki-depth10-1M-seed45 database/phantom-wiki
 
 This will:
-1. Convert articles.json → collection.tsv (one passage per row)
+1. Convert articles → collection.tsv (one passage per row)
 2. Build a ColBERT index using colbertv2.0 checkpoint
 
 The output directory will contain:
@@ -40,6 +40,42 @@ def articles_to_collection(articles_path: str, output_dir: str) -> str:
         for pid, article in enumerate(articles):
             # Combine title and article text as the passage
             # Replace tabs and newlines to keep TSV format intact
+            title = article["title"].replace("\t", " ").replace("\n", " ")
+            text = article["article"].replace("\t", " ").replace("\n", " ")
+            passage = f"{title}: {text}"
+            f.write(f"{pid}\t{passage}\n")
+
+    print(f"Created collection with {len(articles)} passages.")
+    return collection_path
+
+
+def hf_dataset_to_collection(repo_id: str, output_dir: str) -> str:
+    """Download a Hugging Face dataset and convert to collection.tsv for ColBERT."""
+    try:
+        from datasets import load_dataset
+    except ImportError:
+        print("Error: 'datasets' package is required for --from-hf.")
+        print("Install it with: uv pip install datasets")
+        sys.exit(1)
+
+    collection_dir = os.path.join(output_dir, "collection")
+    os.makedirs(collection_dir, exist_ok=True)
+    collection_path = os.path.join(collection_dir, "collection.tsv")
+
+    print(f"Downloading dataset from Hugging Face: {repo_id}...")
+    dataset = load_dataset(repo_id, split="train")
+
+    # Save raw articles as articles.json so the repo has the source data
+    articles_path = os.path.join(output_dir, "articles.json")
+    print(f"Saving {len(dataset)} articles to {articles_path}...")
+    articles = [{"title": row["title"], "article": row["article"]} for row in dataset]
+    with open(articles_path, "w") as f:
+        json.dump(articles, f)
+    print(f"Saved articles.json ({len(articles)} articles).")
+
+    print(f"Writing {len(dataset)} passages to {collection_path}...")
+    with open(collection_path, "w") as f:
+        for pid, article in enumerate(articles):
             title = article["title"].replace("\t", " ").replace("\n", " ")
             text = article["article"].replace("\t", " ").replace("\n", " ")
             passage = f"{title}: {text}"
@@ -83,9 +119,20 @@ def build_index(
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Build ColBERT index from articles.json")
-    parser.add_argument("articles_path", help="Path to articles.json")
+    parser = argparse.ArgumentParser(description="Build ColBERT index from articles")
+    parser.add_argument(
+        "articles_path",
+        nargs="?",
+        default=None,
+        help="Path to articles.json (not needed when using --from-hf)",
+    )
     parser.add_argument("output_dir", help="Directory to write collection and index")
+    parser.add_argument(
+        "--from-hf",
+        metavar="REPO_ID",
+        help="Download dataset from Hugging Face instead of a local file "
+        "(e.g. julianghadially/phantom-wiki-depth10-1M-seed45)",
+    )
     parser.add_argument("--index-name", default="phantom-wiki", help="Name for the index")
     parser.add_argument("--checkpoint", default="colbert-ir/colbertv2.0", help="ColBERT checkpoint")
     parser.add_argument("--nbits", type=int, default=2, help="Quantization bits (default: 2)")
@@ -96,16 +143,19 @@ def main():
     )
     args = parser.parse_args()
 
-    if not os.path.exists(args.articles_path):
-        print(f"Error: {args.articles_path} not found")
-        sys.exit(1)
-
-    collection_path = articles_to_collection(args.articles_path, args.output_dir)
+    if args.from_hf:
+        collection_path = hf_dataset_to_collection(args.from_hf, args.output_dir)
+    elif args.articles_path:
+        if not os.path.exists(args.articles_path):
+            print(f"Error: {args.articles_path} not found")
+            sys.exit(1)
+        collection_path = articles_to_collection(args.articles_path, args.output_dir)
+    else:
+        parser.error("Either provide articles_path or use --from-hf REPO_ID")
 
     if args.collection_only:
         print("Skipping index build (--collection-only).")
-        print(f"\nTo build the index later, run:")
-        print(f"  python scripts/build_index.py {args.articles_path} {args.output_dir}")
+        print(f"\nTo build the index later, re-run without --collection-only.")
         return
 
     build_index(
