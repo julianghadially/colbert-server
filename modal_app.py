@@ -65,7 +65,12 @@ image = (
 
 volume = modal.Volume.from_name(VOLUME_NAME, create_if_missing=True)
 
-app = modal.App(f"colbert-server-{DATASET}", image=image, volumes={DATA_DIR: volume})
+app = modal.App(
+    f"colbert-server-{DATASET}",
+    image=image,
+    volumes={DATA_DIR: volume},
+    secrets=[modal.Secret.from_dict({"DATASET": DATASET})],
+)
 
 
 @app.function(timeout=1800)
